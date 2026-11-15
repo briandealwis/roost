@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 enum LabelStyle: String, CaseIterable {
     case watermark, badge
@@ -27,7 +28,7 @@ extension Notification.Name {
 
 /// UserDefaults-backed preferences. Every setter posts `.roostSettingsChanged`.
 @MainActor
-final class Settings {
+final class Settings: ObservableObject {
     static let shared = Settings()
 
     private enum Key {
@@ -61,6 +62,7 @@ final class Settings {
     }
 
     private func set(_ value: Any, _ key: String) {
+        objectWillChange.send()
         defaults.set(value, forKey: key)
         NotificationCenter.default.post(name: .roostSettingsChanged, object: nil)
     }

@@ -37,7 +37,7 @@ built-in screen. It can also give your Spaces names.
 - Each Space can show a label with its name. It can be a large watermark behind your windows or
   a small badge above them, in any corner, at the top or bottom center, or in the middle. The
   label belongs to its Space, so it slides along when you swipe between desktops.
-- Turn the feature on or off under **Preferences → Space Names**. The menu bar name and the
+- Turn the feature on or off in **Settings… → Space Names**. The menu bar name and the
   labels each have their own switch too.
 
 ### Menu (left- or right-click the menu bar icon)
@@ -48,8 +48,12 @@ built-in screen. It can also give your Spaces names.
   more displays are connected; otherwise the Displays pane just stays open.
 - **Displays Settings…**, **Restore Layout Now**, **Save Layout Now**
 - **Saved Display Setups**: each setup with its window count and when it was last seen.
-- **Preferences**: auto-restore, moving windows between Spaces, how often to save in the
-  background, how long to keep setups, Space name options, and Launch at Login.
+- **Settings…** (⌘,) opens the settings window:
+  - **Window Layouts**: auto-restore, moving windows between Spaces, how often to save in the
+    background, how long to keep unused display setups, and Launch at Login.
+  - **Space Names**: the on/off switch, the name in the menu bar, labels on each Space, labels
+    for unnamed Spaces, and label style and position. Options that depend on a switch are
+    greyed out while it's off.
 
 ## Install
 

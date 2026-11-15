@@ -1,6 +1,5 @@
 import AppKit
 import RoostCore
-import ServiceManagement
 
 /// The menu bar item. Left- or right-clicking opens the same menu.
 @MainActor
@@ -80,7 +79,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         menu.addItem(item("Displays Settings…", #selector(openDisplays)))
         menu.addItem(.separator())
 
-        menu.addItem(submenu("Preferences", preferencesMenu()))
+        menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("Quit Roost", #selector(quit), key: "q"))
     }
 
@@ -125,60 +124,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         sub.addItem(.separator())
         let days = settings.retentionDays
         sub.addItem(disabled(days > 0 ? "Setups unused for \(days) days are forgotten" : "Setups are kept forever"))
-        return sub
-    }
-
-    private func preferencesMenu() -> NSMenu {
-        let sub = NSMenu()
-        sub.addItem(toggle("Restore Automatically on Display Change", settings.autoRestore, #selector(toggleAutoRestore)))
-        sub.addItem(toggle("Move Windows Back to Their Spaces", settings.moveAcrossSpaces, #selector(toggleMoveAcrossSpaces)))
-
-        let interval = NSMenu()
-        for (label, seconds) in [("Off", 0), ("Every Minute", 60), ("Every 2 Minutes", 120), ("Every 5 Minutes", 300), ("Every 15 Minutes", 900)] {
-            let entry = item(label, #selector(setSnapshotInterval(_:)))
-            entry.tag = seconds
-            entry.state = settings.snapshotInterval == seconds ? .on : .off
-            interval.addItem(entry)
-        }
-        sub.addItem(submenu("Background Saves", interval))
-
-        let retention = NSMenu()
-        for (label, days) in [("1 Week", 7), ("2 Weeks", 14), ("1 Month", 30), ("3 Months", 90), ("Never", 0)] {
-            let entry = item(label, #selector(setRetention(_:)))
-            entry.tag = days
-            entry.state = settings.retentionDays == days ? .on : .off
-            retention.addItem(entry)
-        }
-        sub.addItem(submenu("Forget Unused Display Setups After", retention))
-
-        sub.addItem(.separator())
-        sub.addItem(toggle("Space Names", settings.spaceNamesEnabled, #selector(toggleSpaceNames)))
-        if settings.spaceNamesEnabled {
-            sub.addItem(toggle("Show Space Name in Menu Bar", settings.showNameInMenuBar, #selector(toggleMenuBarName)))
-            sub.addItem(toggle("Show Label on Each Space", settings.showLabels, #selector(toggleLabels)))
-            if settings.showLabels {
-                sub.addItem(toggle("Label Unnamed Spaces", settings.labelUnnamedSpaces, #selector(toggleLabelUnnamed)))
-                let style = NSMenu()
-                for value in LabelStyle.allCases {
-                    let entry = item(value.title, #selector(setLabelStyle(_:)))
-                    entry.representedObject = value.rawValue
-                    entry.state = settings.labelStyle == value ? .on : .off
-                    style.addItem(entry)
-                }
-                sub.addItem(submenu("Label Style", style))
-                let position = NSMenu()
-                for value in LabelPosition.allCases {
-                    let entry = item(value.title, #selector(setLabelPosition(_:)))
-                    entry.representedObject = value.rawValue
-                    entry.state = settings.labelPosition == value ? .on : .off
-                    position.addItem(entry)
-                }
-                sub.addItem(submenu("Label Position", position))
-            }
-        }
-
-        sub.addItem(.separator())
-        sub.addItem(toggle("Launch at Login", SMAppService.mainApp.status == .enabled, #selector(toggleLaunchAtLogin)))
         return sub
     }
 
@@ -228,36 +173,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     @objc private func openArrangement() { SystemSettings.openDisplayArrangement() }
     @objc private func openDisplays() { SystemSettings.openDisplays() }
 
-    @objc private func toggleAutoRestore() { settings.autoRestore.toggle() }
-    @objc private func toggleMoveAcrossSpaces() { settings.moveAcrossSpaces.toggle() }
-    @objc private func setSnapshotInterval(_ sender: NSMenuItem) { settings.snapshotInterval = sender.tag }
-    @objc private func setRetention(_ sender: NSMenuItem) { settings.retentionDays = sender.tag }
-    @objc private func toggleSpaceNames() { settings.spaceNamesEnabled.toggle() }
-    @objc private func toggleMenuBarName() { settings.showNameInMenuBar.toggle() }
-    @objc private func toggleLabels() { settings.showLabels.toggle() }
-    @objc private func toggleLabelUnnamed() { settings.labelUnnamedSpaces.toggle() }
-
-    @objc private func setLabelStyle(_ sender: NSMenuItem) {
-        if let raw = sender.representedObject as? String, let value = LabelStyle(rawValue: raw) { settings.labelStyle = value }
-    }
-
-    @objc private func setLabelPosition(_ sender: NSMenuItem) {
-        if let raw = sender.representedObject as? String, let value = LabelPosition(rawValue: raw) { settings.labelPosition = value }
-    }
-
-    @objc private func toggleLaunchAtLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.messageText = "Couldn't change Launch at Login"
-            alert.runModal()
-        }
-    }
+    @objc private func openSettings() { SettingsWindowController.shared.show() }
 
     @objc private func quit() { NSApp.terminate(nil) }
 
@@ -266,12 +182,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
         let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
         entry.target = self
-        return entry
-    }
-
-    private func toggle(_ title: String, _ on: Bool, _ action: Selector) -> NSMenuItem {
-        let entry = item(title, action)
-        entry.state = on ? .on : .off
         return entry
     }
 
