@@ -117,3 +117,7 @@ make run           # build the .app and launch it
 - `Sources/RoostCore` contains the pure logic and has no AppKit dependency.
 - `Sources/Roost` is the app: event handling (`LayoutManager`), system access (`System/`,
   `Private/`) and UI (`UI/`).
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
