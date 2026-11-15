@@ -13,12 +13,10 @@ jobs:
       - name: Toolchain
         run: swift --version
       - name: Test
-        run: swift test
-      - name: Build app (universal)
-        run: UNIVERSAL=1 scripts/build-app.sh
-      - name: Zip
-        run: cd build && ditto -c -k --keepParent Roost.app Roost.zip
+        run: ./build.sh test
+      - name: Package (universal)
+        run: ./build.sh dist
       - uses: actions/upload-artifact@v4
         with:
           name: Roost
-          path: build/Roost.zip
+          path: build/Roost-*.zip

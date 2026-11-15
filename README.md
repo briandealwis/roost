@@ -56,11 +56,11 @@ built-in screen. It can also give your Spaces names.
 You need macOS 13 or later and Xcode or the Command Line Tools.
 
 ```sh
-make install          # builds build/Roost.app and copies it to /Applications
-open /Applications/Roost.app
+./build.sh install    # Release build, copied to ~/Applications
+open ~/Applications/Roost.app
 ```
 
-Every push also builds a universal `Roost.zip` on GitHub Actions; download it from the
+Every push also builds a universal `Roost-<version>.zip` on GitHub Actions; download it from the
 **Build** workflow run.
 
 On first launch, grant **Accessibility** access when asked (System Settings › Privacy &
@@ -69,8 +69,8 @@ Recording.
 
 > **Signing tip:** macOS ties the Accessibility grant to the app's code signature. An ad-hoc
 > build (the default) gets a new signature every time you rebuild, so you'd have to grant
-> access again. Sign with a stable identity to avoid this:
-> `SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" make install`
+> access again. Sign with your Apple Developer identity to avoid this:
+> `DEVELOPMENT_TEAM=ABCDE12345 ./build.sh install`
 
 **Recommended macOS setting:** System Settings › Desktop & Dock › Mission Control ›
 **Displays have separate Spaces** = on. This is the default, and it is what lets each monitor
@@ -109,9 +109,12 @@ Logs: `log stream --predicate 'subsystem == "app.roost.Roost"' --info`
 ## Development
 
 ```sh
-swift build        # debug build
-swift test         # unit tests for RoostCore (models, store and pruning, matching, geometry)
-make run           # build the .app and launch it
+./build.sh            # Release build → build/Roost.app
+./build.sh run        # Debug build and launch
+./build.sh test       # Unit tests for RoostCore (models, store and pruning, matching, geometry)
+./build.sh install    # Release build, copied to ~/Applications
+./build.sh dist       # Universal Release build, zipped to build/Roost-<version>.zip
+./build.sh clean
 ```
 
 - `Sources/RoostCore` contains the pure logic and has no AppKit dependency.
