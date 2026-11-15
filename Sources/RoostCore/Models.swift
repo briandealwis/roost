@@ -1,9 +1,10 @@
+import CoreGraphics
 import Foundation
 
 /// One physical display, as seen at snapshot time.
 /// `frame` is in global CoreGraphics coordinates (origin top-left of the main display, y grows down),
 /// which is the same space the Accessibility API uses for window positions.
-public struct DisplayInfo: Codable, Hashable {
+public struct DisplayInfo: Codable, Equatable {
     public var uuid: String
     public var name: String
     public var frame: CGRect
@@ -22,7 +23,7 @@ public struct DisplayInfo: Codable, Hashable {
 /// The key includes each display's position and size, so re-arranging displays in
 /// System Settings (or changing resolution) produces a new configuration. The old one
 /// simply stops being seen and is pruned once it exceeds the retention period.
-public struct DisplayConfiguration: Codable, Hashable {
+public struct DisplayConfiguration: Codable, Equatable {
     public private(set) var displays: [DisplayInfo]
 
     public init(displays: [DisplayInfo]) {
@@ -51,7 +52,7 @@ public struct DisplayConfiguration: Codable, Hashable {
 }
 
 /// A window's saved placement.
-public struct WindowRecord: Codable, Hashable {
+public struct WindowRecord: Codable, Equatable {
     public var windowID: UInt32
     public var pid: Int32
     public var bundleID: String?
@@ -88,7 +89,7 @@ public struct WindowRecord: Codable, Hashable {
     }
 }
 
-public struct LayoutSnapshot: Codable, Hashable {
+public struct LayoutSnapshot: Codable, Equatable {
     public var createdAt: Date
     public var reason: String
     public var windows: [WindowRecord]
@@ -100,7 +101,7 @@ public struct LayoutSnapshot: Codable, Hashable {
     }
 }
 
-public struct SavedLayout: Codable, Hashable {
+public struct SavedLayout: Codable, Equatable {
     public var configuration: DisplayConfiguration
     public var snapshot: LayoutSnapshot
     /// Last time this display configuration was active. Drives pruning.

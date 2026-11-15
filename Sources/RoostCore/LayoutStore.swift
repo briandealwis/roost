@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Persists one layout per display configuration.

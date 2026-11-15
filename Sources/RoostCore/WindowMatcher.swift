@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A window that exists right now and could be put back.
@@ -17,7 +18,7 @@ public struct WindowCandidate: Hashable {
     }
 }
 
-public struct WindowMatch: Hashable {
+public struct WindowMatch: Equatable {
     public var record: WindowRecord
     public var candidate: WindowCandidate
 }
