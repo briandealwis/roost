@@ -51,9 +51,11 @@ built-in screen. It can also give your Spaces names.
 - **Settings…** (⌘,) opens the settings window:
   - **Window Layouts**: auto-restore, moving windows between Spaces, how often to save in the
     background, how long to keep unused display setups, and Launch at Login.
-  - **Space Names**: the on/off switch, the name in the menu bar, labels on each Space, labels
-    for unnamed Spaces, and label style and position. Options that depend on a switch are
-    greyed out while it's off.
+  - **Space Names**: the on/off switch and the name in the menu bar.
+  - **Space Labels**: labels on each Space, labels for Spaces without a name, and label style
+    and position.
+
+  Options that depend on a switch are greyed out while it's off.
 
 ## Install
 

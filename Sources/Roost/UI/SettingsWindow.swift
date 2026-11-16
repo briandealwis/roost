@@ -61,27 +61,32 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Name Spaces", isOn: $settings.spaceNamesEnabled)
-                Group {
-                    Toggle("Show the current Space’s name in the menu bar", isOn: $settings.showNameInMenuBar)
-                    Toggle("Show a label on each Space", isOn: $settings.showLabels)
-                    Group {
-                        Toggle("Also label Spaces without a name (“Desktop 3”)", isOn: $settings.labelUnnamedSpaces)
-                        Picker("Label style", selection: $settings.labelStyle) {
-                            ForEach(LabelStyle.allCases, id: \.self) { Text($0.title).tag($0) }
-                        }
-                        Picker("Label position", selection: $settings.labelPosition) {
-                            ForEach(LabelPosition.allCases, id: \.self) { Text($0.title).tag($0) }
-                        }
-                    }
-                    .disabled(!settings.showLabels)
-                }
-                .disabled(!settings.spaceNamesEnabled)
+                Toggle("Show the current Space’s name in the menu bar", isOn: $settings.showNameInMenuBar)
+                    .disabled(!settings.spaceNamesEnabled)
             } header: {
                 Text("Space Names")
             } footer: {
                 Text("Rename a Space from the Roost menu while you’re on it, or pick any Space from the Spaces submenu.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+
+            Section {
+                Toggle("Show a label on each Space", isOn: $settings.showLabels)
+                Group {
+                    Toggle("Show labels for Spaces without a name", isOn: $settings.labelUnnamedSpaces)
+                    Picker("Label style", selection: $settings.labelStyle) {
+                        ForEach(LabelStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    Picker("Label position", selection: $settings.labelPosition) {
+                        ForEach(LabelPosition.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+                .padding(.leading, 20)
+                .disabled(!settings.showLabels)
+            } header: {
+                Text("Space Labels")
+            }
+            .disabled(!settings.spaceNamesEnabled)
         }
         .formStyle(.grouped)
         .frame(width: 520)
