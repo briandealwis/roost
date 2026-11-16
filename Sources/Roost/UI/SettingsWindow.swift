@@ -57,6 +57,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Layouts are also saved when you lock the screen, when the Mac or displays sleep, and just before a display is connected or disconnected.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
@@ -68,6 +69,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Rename a Space from the Roost menu while you’re on it, or pick any Space from the Spaces submenu.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
