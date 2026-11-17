@@ -30,6 +30,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
     @State private var desktopShortcuts: [Int] = []
+    @State private var canPostEvents = Permissions.canPostEvents
 
     var body: some View {
         Form {
@@ -96,6 +97,19 @@ struct SettingsView: View {
                 LabeledContent("Keyboard shortcut") {
                     ShortcutRecorder(combo: $settings.previousSpaceShortcut)
                 }
+                if !canPostEvents {
+                    LabeledContent {
+                        Button("Allow…") {
+                            Permissions.requestPostEvents()
+                            NSWorkspace.shared.open(SystemSettings.accessibilityURL)
+                        }
+                    } label: {
+                        Text("Roost isn’t allowed to send keystrokes, so it can’t use Mission Control’s shortcuts. "
+                            + "Turn Roost on in Privacy & Security › Accessibility.")
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 if !desktopShortcuts.isEmpty {
                     LabeledContent("Mission Control shortcuts") {
                         Text("On for " + desktopShortcuts.map { "Desktop \($0)" }.joined(separator: ", "))
@@ -111,13 +125,18 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onAppear { desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers() }
+        .onAppear { refreshSystemState() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers()
+            refreshSystemState()
         }
         .formStyle(.grouped)
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func refreshSystemState() {
+        desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers()
+        canPostEvents = Permissions.canPostEvents
     }
 
     private var previousSpaceFooter: String {

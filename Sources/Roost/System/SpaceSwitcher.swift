@@ -38,6 +38,9 @@ final class SpaceSwitcher: NSObject {
         center.addObserver(self, selector: #selector(updateHotKey), name: .roostSettingsChanged, object: nil)
         center.addObserver(self, selector: #selector(recordingChanged(_:)), name: .roostShortcutRecording, object: nil)
         updateHotKey()
+        if settings.previousSpaceShortcut != nil, !Permissions.canPostEvents {
+            Permissions.requestPostEvents()
+        }
     }
 
     /// The Space to go back to, if it still exists.
@@ -86,23 +89,28 @@ final class SpaceSwitcher: NSObject {
 
     func switchTo(_ space: SpaceInfo) {
         let label = "\(space.defaultName) (id \(space.id))"
-        if !space.isFullscreen, let shortcut = MissionControlShortcuts.switchToDesktop(space.number) {
-            let canPost = CGPreflightPostEventAccess()
+        let shortcut = space.isFullscreen ? nil : MissionControlShortcuts.switchToDesktop(space.number)
+        if shortcut != nil, !Permissions.canPostEvents {
+            // Without this permission macOS silently drops the keystroke.
+            Permissions.requestPostEvents()
+        }
+        if let shortcut, Permissions.canPostEvents {
             Task { @MainActor in
                 // The user is probably still holding the modifiers of our own shortcut; let go
                 // of them first so Mission Control sees exactly its shortcut.
                 let released = await Self.waitForModifierRelease()
                 shortcut.post()
                 self.note("Pressed Mission Control shortcut (key \(shortcut.keyCode), flags \(shortcut.flags)) for \(label); "
-                    + "may send keystrokes: \(canPost); modifiers released: \(released)")
+                    + "modifiers released: \(released)")
             }
             return
         }
+        let why = shortcut == nil ? "No Desktop \(space.number) shortcut" : "Not allowed to send keystrokes"
         if let app = bringForwardWindow(on: space) {
-            note("No Desktop \(space.number) shortcut; brought forward a \(app) window on \(label)")
+            note("\(why); brought forward a \(app) window on \(label)")
             return
         }
-        note("No Desktop \(space.number) shortcut and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
+        note("\(why) and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
         explainDesktopShortcuts(for: space)
     }

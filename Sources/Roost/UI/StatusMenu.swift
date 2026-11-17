@@ -66,7 +66,10 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         // Diagnostics while the previous-Space feature is being developed.
         let switcher = SpaceSwitcher.shared
         menu.addItem(disabled("    Shortcut registered: \(switcher.isHotKeyRegistered ? "yes" : "no") · "
-            + "can send keystrokes: \(CGPreflightPostEventAccess() ? "yes" : "no")"))
+            + "can send keystrokes: \(Permissions.canPostEvents ? "yes" : "no")"))
+        if !Permissions.canPostEvents {
+            menu.addItem(item("⚠︎ Allow Roost to Send Keystrokes…", #selector(grantPostEvents)))
+        }
         menu.addItem(disabled("    Last attempt: \(switcher.lastResult)"))
         if settings.spaceNamesEnabled {
             menu.addItem(submenu("Spaces", spacesMenu(spaces)))
@@ -181,6 +184,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         if alert.runModal() == .alertFirstButtonReturn {
             names.setName(field.stringValue, for: space)
         }
+    }
+
+    @objc private func grantPostEvents() {
+        Permissions.requestPostEvents()
+        NSWorkspace.shared.open(SystemSettings.accessibilityURL)
     }
 
     @objc private func switchBack() { SpaceSwitcher.shared.switchToPreviousSpace() }
