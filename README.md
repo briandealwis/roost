@@ -47,11 +47,14 @@ or an app pulled you to another one. Press it again to return. On a Mac keyboard
 **fn** unless F-keys are set to act as standard function keys. You can change or remove the
 shortcut in **Settings…**, and the menu also has a **Switch Back to …** item.
 
-macOS has no public API for changing Spaces, so Roost presses Mission Control's own
-**Switch to Desktop N** shortcut for you. Turn those on in System Settings › Keyboard ›
-Keyboard Shortcuts › Mission Control. For Spaces without one, including full-screen apps, Roost
-brings forward a window on that Space and macOS follows it there. That fallback can't reach an
-empty Space.
+macOS has no public API for changing Spaces, so Roost presses Mission Control's own shortcuts
+for you (System Settings › Keyboard › Keyboard Shortcuts › Mission Control):
+
+1. **Switch to Desktop N**, if you've turned it on. This jumps straight there.
+2. Otherwise **Move left/right a space** (⌃← / ⌃→, on by default), pressed once for each Space
+   in between. This reaches any Space on the same display, including full-screen apps.
+3. For a Space on another display, Roost brings forward one of its windows and macOS follows it
+   there. This can't reach an empty Space.
 
 ### Menu (left- or right-click the menu bar icon)
 

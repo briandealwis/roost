@@ -30,6 +30,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
     @State private var desktopShortcuts: [Int] = []
+    @State private var canMoveLeftRight = true
     @State private var canPostEvents = Permissions.canPostEvents
 
     var body: some View {
@@ -110,11 +111,8 @@ struct SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if !desktopShortcuts.isEmpty {
-                    LabeledContent("Mission Control shortcuts") {
-                        Text("On for " + desktopShortcuts.map { "Desktop \($0)" }.joined(separator: ", "))
-                            .foregroundStyle(.secondary)
-                    }
+                LabeledContent("Mission Control shortcuts") {
+                    Text(missionControlSummary).foregroundStyle(.secondary)
                 }
                 Button("Keyboard Shortcuts…") { NSWorkspace.shared.open(SystemSettings.keyboardURL) }
             } header: {
@@ -136,14 +134,24 @@ struct SettingsView: View {
 
     private func refreshSystemState() {
         desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers()
+        canMoveLeftRight = MissionControlShortcuts.moveLeftASpace != nil && MissionControlShortcuts.moveRightASpace != nil
         canPostEvents = Permissions.canPostEvents
     }
 
+    private var missionControlSummary: String {
+        var parts: [String] = []
+        if !desktopShortcuts.isEmpty {
+            parts.append("Switch to " + desktopShortcuts.map { "Desktop \($0)" }.joined(separator: ", "))
+        }
+        if canMoveLeftRight { parts.append("Move left/right a space") }
+        return parts.isEmpty ? "None turned on" : parts.joined(separator: " · ")
+    }
+
     private var previousSpaceFooter: String {
-        var text = "Roost switches Spaces with Mission Control’s “Switch to Desktop N” shortcuts "
-            + "(System Settings › Keyboard › Keyboard Shortcuts › Mission Control). "
-            + "Spaces without one are reached by bringing forward one of their windows, "
-            + "which doesn’t work for empty Spaces."
+        var text = "Roost presses Mission Control’s shortcuts for you (System Settings › Keyboard › Keyboard Shortcuts › "
+            + "Mission Control): “Switch to Desktop N” when it’s on, otherwise “Move left/right a space” as many times as needed. "
+            + "A Space on another display is reached by bringing forward one of its windows, "
+            + "which doesn’t work if it’s empty."
         if settings.previousSpaceShortcut?.isFunctionKey == true {
             text += " On a Mac keyboard, also hold fn unless “Use F1, F2, etc. keys as standard function keys” is on."
         }
