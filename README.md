@@ -93,6 +93,10 @@ Recording.
 > build (the default) gets a new signature every time you rebuild, so you'd have to grant
 > access again. Sign with your Apple Developer identity to avoid this:
 > `DEVELOPMENT_TEAM=ABCDE12345 ./build.sh install`
+>
+> If Roost already looks switched on in Privacy & Security › Accessibility but still can't move
+> windows or switch Spaces, run `./build.sh reset-permissions`. Then relaunch Roost and approve
+> the prompts.
 
 **Recommended macOS setting:** System Settings › Desktop & Dock › Mission Control ›
 **Displays have separate Spaces** = on. This is the default, and it is what lets each monitor
@@ -137,6 +141,7 @@ Logs: `log stream --predicate 'subsystem == "app.roost.Roost"' --info`
 ./build.sh install    # Release build, copied to ~/Applications
 ./build.sh dist       # Universal Release build, zipped to build/Roost-<version>.zip
 ./build.sh clean
+./build.sh reset-permissions   # make macOS ask for permissions again after an ad-hoc rebuild
 ```
 
 - `Sources/RoostCore` contains the pure logic and has no AppKit dependency.

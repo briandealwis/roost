@@ -112,7 +112,11 @@ final class SpaceSwitcher: NSObject {
         }
         note("\(why) and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
-        explainDesktopShortcuts(for: space)
+        if !AXIsProcessTrusted() || (shortcut != nil && !Permissions.canPostEvents) {
+            explainMissingPermissions(for: space)
+        } else {
+            explainDesktopShortcuts(for: space)
+        }
     }
 
     /// Returns the app name whose window was brought forward.
@@ -129,6 +133,26 @@ final class SpaceSwitcher: NSObject {
             return window.appName
         }
         return nil
+    }
+
+    private func explainMissingPermissions(for space: SpaceInfo) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Roost can’t switch to \(SpaceNames.shared.displayName(for: space))"
+        var missing: [String] = []
+        if !AXIsProcessTrusted() { missing.append("Accessibility access") }
+        if !Permissions.canPostEvents { missing.append("permission to send keystrokes") }
+        alert.informativeText = "Roost doesn’t have \(missing.joined(separator: " or ")). "
+            + "Turn Roost on in System Settings › Privacy & Security › Accessibility.\n\n"
+            + "If Roost already looks turned on there, it was probably rebuilt: macOS ties the permission "
+            + "to the exact build. Remove Roost from the list with −, add it back, and relaunch Roost."
+        alert.addButton(withTitle: "Open Privacy & Security")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            Permissions.requestAccessibility()
+            Permissions.requestPostEvents()
+            NSWorkspace.shared.open(SystemSettings.accessibilityURL)
+        }
     }
 
     private func explainDesktopShortcuts(for space: SpaceInfo) {
