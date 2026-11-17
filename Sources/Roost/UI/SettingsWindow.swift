@@ -148,10 +148,10 @@ struct SettingsView: View {
     }
 
     private var previousSpaceFooter: String {
-        var text = "Roost presses Mission Control’s shortcuts for you (System Settings › Keyboard › Keyboard Shortcuts › "
+        var text = "Best effort: macOS has no public way to switch Spaces, so Roost presses Mission Control’s shortcuts for you (System Settings › Keyboard › Keyboard Shortcuts › "
             + "Mission Control): “Switch to Desktop N” when it’s on, otherwise “Move left/right a space” as many times as needed. "
-            + "A Space on another display is reached by bringing forward one of its windows, "
-            + "which doesn’t work if it’s empty."
+            + "If that doesn’t work, or the Space is on another display, Roost brings forward one of its windows, "
+            + "which doesn’t work if the Space is empty."
         if settings.previousSpaceShortcut?.isFunctionKey == true {
             text += " On a Mac keyboard, also hold fn unless “Use F1, F2, etc. keys as standard function keys” is on."
         }
