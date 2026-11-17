@@ -63,6 +63,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             }
         }
         menu.addItem(switchBackItem())
+        // Diagnostics while the previous-Space feature is being developed.
+        let switcher = SpaceSwitcher.shared
+        menu.addItem(disabled("    Shortcut registered: \(switcher.isHotKeyRegistered ? "yes" : "no") · "
+            + "can send keystrokes: \(CGPreflightPostEventAccess() ? "yes" : "no")"))
+        menu.addItem(disabled("    Last attempt: \(switcher.lastResult)"))
         if settings.spaceNamesEnabled {
             menu.addItem(submenu("Spaces", spacesMenu(spaces)))
         }

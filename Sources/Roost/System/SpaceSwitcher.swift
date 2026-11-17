@@ -21,6 +21,14 @@ final class SpaceSwitcher: NSObject {
     private(set) var previousSpaceID: CGSSpaceID?
     private var isRecordingShortcut = false
     private var hasExplainedShortcuts = false
+    /// What the last switch attempt did, shown in the menu while we debug this feature.
+    private(set) var lastResult = "Not used yet"
+    private(set) var isHotKeyRegistered = false
+
+    private func note(_ message: String) {
+        lastResult = message
+        Log.spaces.notice("Switch back: \(message, privacy: .public)")
+    }
 
     func start() {
         currentSpaceID = CGS.activeSpaceID()
@@ -38,7 +46,11 @@ final class SpaceSwitcher: NSObject {
     }
 
     @objc private func activeSpaceChanged() {
-        guard let now = CGS.activeSpaceID(), now != currentSpaceID else { return }
+        guard let now = CGS.activeSpaceID(), now != currentSpaceID else {
+            Log.spaces.info("Active Space notification, but active Space unchanged (\(CGS.activeSpaceID() ?? 0))")
+            return
+        }
+        Log.spaces.info("Active Space \(self.currentSpaceID ?? 0) → \(now)")
         // Going back makes the Space we left the new "previous", so pressing the shortcut
         // repeatedly toggles between two Spaces.
         previousSpaceID = currentSpaceID
@@ -53,15 +65,19 @@ final class SpaceSwitcher: NSObject {
     @objc private func updateHotKey() {
         guard let combo = settings.previousSpaceShortcut, !isRecordingShortcut else {
             HotKeyCenter.shared.unregister(id: Self.hotKeyID)
+            isHotKeyRegistered = false
             return
         }
-        HotKeyCenter.shared.register(id: Self.hotKeyID, combo: combo) { [weak self] in
+        isHotKeyRegistered = HotKeyCenter.shared.register(id: Self.hotKeyID, combo: combo) { [weak self] in
+            Log.spaces.notice("Switch back: shortcut pressed")
             self?.switchToPreviousSpace()
         }
+        Log.spaces.notice("Shortcut \(combo.display, privacy: .public) (key \(combo.keyCode), modifiers \(combo.carbonModifiers)) registered: \(self.isHotKeyRegistered)")
     }
 
     func switchToPreviousSpace() {
         guard let target = previousSpace else {
+            note(previousSpaceID == nil ? "No previous Space recorded yet" : "Previous Space \(previousSpaceID ?? 0) no longer exists")
             NSSound.beep()
             return
         }
@@ -69,22 +85,31 @@ final class SpaceSwitcher: NSObject {
     }
 
     func switchTo(_ space: SpaceInfo) {
+        let label = "\(space.defaultName) (id \(space.id))"
         if !space.isFullscreen, let shortcut = MissionControlShortcuts.switchToDesktop(space.number) {
+            let canPost = CGPreflightPostEventAccess()
             Task { @MainActor in
                 // The user is probably still holding the modifiers of our own shortcut; let go
                 // of them first so Mission Control sees exactly its shortcut.
-                await Self.waitForModifierRelease()
+                let released = await Self.waitForModifierRelease()
                 shortcut.post()
+                self.note("Pressed Mission Control shortcut (key \(shortcut.keyCode), flags \(shortcut.flags)) for \(label); "
+                    + "may send keystrokes: \(canPost); modifiers released: \(released)")
             }
             return
         }
-        if bringForwardWindow(on: space) { return }
+        if let app = bringForwardWindow(on: space) {
+            note("No Desktop \(space.number) shortcut; brought forward a \(app) window on \(label)")
+            return
+        }
+        note("No Desktop \(space.number) shortcut and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
         explainDesktopShortcuts(for: space)
     }
 
-    private func bringForwardWindow(on space: SpaceInfo) -> Bool {
-        guard AXIsProcessTrusted() else { return false }
+    /// Returns the app name whose window was brought forward.
+    private func bringForwardWindow(on space: SpaceInfo) -> String? {
+        guard AXIsProcessTrusted() else { return nil }
         // Front-to-back order, so this picks the window that was on top on that Space.
         for window in catalog.liveWindows() where window.spaces == [space.id] {
             guard let element = catalog.elements(for: [window])[window.id],
@@ -93,9 +118,9 @@ final class SpaceSwitcher: NSObject {
             AXUIElementPerformAction(element, "AXRaise" as CFString)
             AXUIElementCreateApplication(window.pid).set("AXFrontmost", true)
             NSRunningApplication(processIdentifier: window.pid)?.activate(options: [])
-            return true
+            return window.appName
         }
-        return false
+        return nil
     }
 
     private func explainDesktopShortcuts(for space: SpaceInfo) {
@@ -113,10 +138,13 @@ final class SpaceSwitcher: NSObject {
         }
     }
 
-    private static func waitForModifierRelease() async {
-        for _ in 0..<40 where !NSEvent.modifierFlags.intersection(KeyCombo.relevantModifiers).isEmpty {
+    /// Returns whether the modifiers were released within a second.
+    private static func waitForModifierRelease() async -> Bool {
+        for _ in 0..<40 {
+            if NSEvent.modifierFlags.intersection(KeyCombo.relevantModifiers).isEmpty { return true }
             try? await Task.sleep(nanoseconds: 25_000_000)
         }
+        return false
     }
 }
 
