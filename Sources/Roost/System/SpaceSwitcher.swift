@@ -87,34 +87,80 @@ final class SpaceSwitcher: NSObject {
 
     func switchTo(_ space: SpaceInfo) {
         let label = "\(space.defaultName) (id \(space.id))"
-        let shortcut = space.isFullscreen ? nil : MissionControlShortcuts.switchToDesktop(space.number)
-        if shortcut != nil, !Permissions.canPostEvents {
-            // Without this permission macOS silently drops the keystroke.
-            Permissions.requestPostEvents()
-        }
-        if let shortcut, Permissions.canPostEvents {
-            Task { @MainActor in
-                // The user is probably still holding the modifiers of our own shortcut; let go
-                // of them first so Mission Control sees exactly its shortcut.
-                let released = await Self.waitForModifierRelease()
-                shortcut.post()
-                self.note("Pressed Mission Control shortcut (key \(shortcut.keyCode), flags \(shortcut.flags)) for \(label); "
-                    + "modifiers released: \(released)")
-            }
+        guard let plan = keystrokePlan(to: space, in: SpacesState.current()) else {
+            fallBack(to: space, label: label, why: "No Mission Control shortcut reaches it")
             return
         }
-        let why = shortcut == nil ? "No Desktop \(space.number) shortcut" : "Not allowed to send keystrokes"
+        // CGPreflightPostEventAccess has been seen to report false transiently while posting
+        // works fine, so don't trust it: press the keys and check whether the Space changed.
+        let preflight = Permissions.canPostEvents
+        Task { @MainActor in
+            // The user is probably still holding the modifiers of our own shortcut; let go
+            // of them first so Mission Control sees exactly its shortcut.
+            let released = await Self.waitForModifierRelease()
+            for (i, key) in plan.keys.enumerated() {
+                if i > 0 { try? await Task.sleep(nanoseconds: 80_000_000) }
+                key.post()
+            }
+            let arrived = await Self.waitForActiveSpace(space.id, timeout: 0.6 + 0.25 * Double(plan.keys.count))
+            let details = "\(plan.description) for \(label); modifiers released: \(released); "
+                + "preflight said may send keystrokes: \(preflight)"
+            if arrived {
+                self.note("Pressed \(details)")
+            } else {
+                if !Permissions.canPostEvents { Permissions.requestPostEvents() }
+                self.fallBack(to: space, label: label, why: "Pressed \(details), but the Space didn’t change")
+            }
+        }
+    }
+
+    private func fallBack(to space: SpaceInfo, label: String, why: String) {
         if let app = bringForwardWindow(on: space) {
             note("\(why); brought forward a \(app) window on \(label)")
             return
         }
         note("\(why) and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
-        if !AXIsProcessTrusted() || (shortcut != nil && !Permissions.canPostEvents) {
+        if !AXIsProcessTrusted() || !Permissions.canPostEvents {
             explainMissingPermissions(for: space)
         } else {
             explainDesktopShortcuts(for: space)
         }
+    }
+
+    private static func waitForActiveSpace(_ id: CGSSpaceID, timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if CGS.activeSpaceID() == id { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return CGS.activeSpaceID() == id
+    }
+
+    private struct KeystrokePlan {
+        var keys: [MissionControlShortcuts.Shortcut]
+        var description: String
+    }
+
+    /// Mission Control keystrokes that get to `space`:
+    /// "Switch to Desktop N" if the user turned it on, otherwise "Move left/right a space"
+    /// (on by default) pressed once per Space in between. The latter only works within the
+    /// display that currently has focus.
+    private func keystrokePlan(to space: SpaceInfo, in state: SpacesState) -> KeystrokePlan? {
+        if !space.isFullscreen, let direct = MissionControlShortcuts.switchToDesktop(space.number) {
+            return KeystrokePlan(keys: [direct], description: "“Switch to Desktop \(space.number)”")
+        }
+        guard let current = state.activeSpace, current.displayUUID == space.displayUUID,
+              let display = state.displays.first(where: { $0.displayUUID == space.displayUUID }),
+              let from = display.spaces.firstIndex(where: { $0.id == current.id }),
+              let to = display.spaces.firstIndex(where: { $0.id == space.id }), from != to
+        else { return nil }
+        let steps = to - from
+        let direction = steps > 0 ? "right" : "left"
+        guard let key = steps > 0 ? MissionControlShortcuts.moveRightASpace : MissionControlShortcuts.moveLeftASpace
+        else { return nil }
+        return KeystrokePlan(keys: Array(repeating: key, count: abs(steps)),
+                            description: "“Move \(direction) a space” ×\(abs(steps))")
     }
 
     /// Returns the app name whose window was brought forward.
@@ -159,7 +205,7 @@ final class SpaceSwitcher: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Roost can’t switch to \(SpaceNames.shared.displayName(for: space))"
-        alert.informativeText = "That Space has no windows to bring forward. Turn on “Switch to Desktop \(space.number)” " +
+        alert.informativeText = "It’s on another display and has no windows to bring forward. Turn on “Switch to Desktop \(space.number)” " +
             "in System Settings › Keyboard › Keyboard Shortcuts › Mission Control and Roost will use it."
         alert.addButton(withTitle: "Open Keyboard Settings")
         alert.addButton(withTitle: "OK")
@@ -194,15 +240,34 @@ enum MissionControlShortcuts {
         }
     }
 
-    /// Symbolic hotkey ids 118…133 are "Switch to Desktop 1…16".
+    /// ⌃ plus the Fn flag macOS sets on arrow keys.
+    private static let controlArrowFlags: UInt64 = 0x84_0000
+
+    /// Symbolic hotkey ids 118…133 are "Switch to Desktop 1…16" (off unless the user turns them on).
     static func switchToDesktop(_ number: Int) -> Shortcut? {
-        guard (1...16).contains(number),
-              let all = UserDefaults(suiteName: "com.apple.symbolichotkeys")?.dictionary(forKey: "AppleSymbolicHotKeys"),
-              let entry = all[String(117 + number)] as? [String: Any],
-              (entry["enabled"] as? NSNumber)?.boolValue == true,
-              let parameters = (entry["value"] as? [String: Any])?["parameters"] as? [NSNumber],
+        guard (1...16).contains(number) else { return nil }
+        return symbolicHotKey(117 + number, default: nil)
+    }
+
+    /// "Move left a space" (id 79), ⌃← and on by default.
+    static var moveLeftASpace: Shortcut? {
+        symbolicHotKey(79, default: Shortcut(keyCode: UInt16(kVK_LeftArrow), flags: controlArrowFlags))
+    }
+
+    /// "Move right a space" (id 81), ⌃→ and on by default.
+    static var moveRightASpace: Shortcut? {
+        symbolicHotKey(81, default: Shortcut(keyCode: UInt16(kVK_RightArrow), flags: controlArrowFlags))
+    }
+
+    /// The user's binding for a Mission Control shortcut, `fallback` if they never changed it
+    /// (macOS only stores customised entries), or nil if it's turned off.
+    private static func symbolicHotKey(_ id: Int, default fallback: Shortcut?) -> Shortcut? {
+        let all = UserDefaults(suiteName: "com.apple.symbolichotkeys")?.dictionary(forKey: "AppleSymbolicHotKeys")
+        guard let entry = all?[String(id)] as? [String: Any] else { return fallback }
+        guard (entry["enabled"] as? NSNumber)?.boolValue ?? true else { return nil }
+        guard let parameters = (entry["value"] as? [String: Any])?["parameters"] as? [NSNumber],
               parameters.count >= 3, parameters[1].intValue != 0xFFFF
-        else { return nil }
+        else { return fallback }
         return Shortcut(keyCode: parameters[1].uint16Value, flags: parameters[2].uint64Value)
     }
 
