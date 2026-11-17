@@ -87,36 +87,54 @@ final class SpaceSwitcher: NSObject {
 
     func switchTo(_ space: SpaceInfo) {
         let label = "\(space.defaultName) (id \(space.id))"
-        let plan = keystrokePlan(to: space, in: SpacesState.current())
-        if plan != nil, !Permissions.canPostEvents {
-            // Without this permission macOS silently drops the keystrokes.
-            Permissions.requestPostEvents()
-        }
-        if let plan, Permissions.canPostEvents {
-            Task { @MainActor in
-                // The user is probably still holding the modifiers of our own shortcut; let go
-                // of them first so Mission Control sees exactly its shortcut.
-                let released = await Self.waitForModifierRelease()
-                for (i, key) in plan.keys.enumerated() {
-                    if i > 0 { try? await Task.sleep(nanoseconds: 80_000_000) }
-                    key.post()
-                }
-                self.note("Pressed \(plan.description) for \(label); modifiers released: \(released)")
-            }
+        guard let plan = keystrokePlan(to: space, in: SpacesState.current()) else {
+            fallBack(to: space, label: label, why: "No Mission Control shortcut reaches it")
             return
         }
-        let why = plan == nil ? "No Mission Control shortcut reaches it" : "Not allowed to send keystrokes"
+        // CGPreflightPostEventAccess has been seen to report false transiently while posting
+        // works fine, so don't trust it: press the keys and check whether the Space changed.
+        let preflight = Permissions.canPostEvents
+        Task { @MainActor in
+            // The user is probably still holding the modifiers of our own shortcut; let go
+            // of them first so Mission Control sees exactly its shortcut.
+            let released = await Self.waitForModifierRelease()
+            for (i, key) in plan.keys.enumerated() {
+                if i > 0 { try? await Task.sleep(nanoseconds: 80_000_000) }
+                key.post()
+            }
+            let arrived = await Self.waitForActiveSpace(space.id, timeout: 0.6 + 0.25 * Double(plan.keys.count))
+            let details = "\(plan.description) for \(label); modifiers released: \(released); "
+                + "preflight said may send keystrokes: \(preflight)"
+            if arrived {
+                self.note("Pressed \(details)")
+            } else {
+                if !Permissions.canPostEvents { Permissions.requestPostEvents() }
+                self.fallBack(to: space, label: label, why: "Pressed \(details), but the Space didn’t change")
+            }
+        }
+    }
+
+    private func fallBack(to space: SpaceInfo, label: String, why: String) {
         if let app = bringForwardWindow(on: space) {
             note("\(why); brought forward a \(app) window on \(label)")
             return
         }
         note("\(why) and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
-        if !AXIsProcessTrusted() || (plan != nil && !Permissions.canPostEvents) {
+        if !AXIsProcessTrusted() || !Permissions.canPostEvents {
             explainMissingPermissions(for: space)
         } else {
             explainDesktopShortcuts(for: space)
         }
+    }
+
+    private static func waitForActiveSpace(_ id: CGSSpaceID, timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if CGS.activeSpaceID() == id { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return CGS.activeSpaceID() == id
     }
 
     private struct KeystrokePlan {
