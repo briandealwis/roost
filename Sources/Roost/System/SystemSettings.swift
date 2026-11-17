@@ -3,6 +3,7 @@ import AppKit
 enum SystemSettings {
     static let displaysURL = URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!
     static let accessibilityURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+    static let keyboardURL = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!
     static let missionControlURL = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!
     private static let bundleID = "com.apple.systempreferences"
 

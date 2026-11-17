@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         labels.start()
         self.labels = labels
 
+        SpaceSwitcher.shared.start()
+
         menu = StatusMenuController(layout: layout)
     }
 

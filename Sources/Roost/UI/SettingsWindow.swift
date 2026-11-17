@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import ServiceManagement
 import SwiftUI
 
@@ -28,6 +29,7 @@ struct SettingsView: View {
     @ObservedObject var settings: Settings
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
+    @State private var desktopShortcuts: [Int] = []
 
     var body: some View {
         Form {
@@ -89,10 +91,44 @@ struct SettingsView: View {
                 Text("Space Labels")
             }
             .disabled(!settings.spaceNamesEnabled)
+
+            Section {
+                LabeledContent("Keyboard shortcut") {
+                    ShortcutRecorder(combo: $settings.previousSpaceShortcut)
+                }
+                if !desktopShortcuts.isEmpty {
+                    LabeledContent("Mission Control shortcuts") {
+                        Text("On for " + desktopShortcuts.map { "Desktop \($0)" }.joined(separator: ", "))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button("Keyboard Shortcuts…") { NSWorkspace.shared.open(SystemSettings.keyboardURL) }
+            } header: {
+                Text("Switch Back to Previous Space")
+            } footer: {
+                Text(previousSpaceFooter)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear { desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            desktopShortcuts = MissionControlShortcuts.enabledDesktopNumbers()
         }
         .formStyle(.grouped)
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var previousSpaceFooter: String {
+        var text = "Roost switches Spaces with Mission Control’s “Switch to Desktop N” shortcuts "
+            + "(System Settings › Keyboard › Keyboard Shortcuts › Mission Control). "
+            + "Spaces without one are reached by bringing forward one of their windows, "
+            + "which doesn’t work for empty Spaces."
+        if settings.previousSpaceShortcut?.isFunctionKey == true {
+            text += " On a Mac keyboard, also hold fn unless “Use F1, F2, etc. keys as standard function keys” is on."
+        }
+        return text
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
@@ -108,5 +144,60 @@ struct SettingsView: View {
                 launchAtLogin = SMAppService.mainApp.status == .enabled
             }
         )
+    }
+}
+
+/// Click to record a new shortcut; Esc cancels. The ✕ removes it, ↺ restores the default.
+struct ShortcutRecorder: View {
+    @Binding var combo: KeyCombo?
+    @State private var isRecording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: { isRecording ? stopRecording() : startRecording() }) {
+                Text(isRecording ? "Type shortcut…" : (combo?.display ?? "Record Shortcut"))
+                    .frame(minWidth: 110)
+            }
+            if !isRecording {
+                if combo != nil {
+                    Button { combo = nil } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.borderless)
+                        .help("Remove shortcut")
+                }
+                if combo != .defaultPreviousSpace {
+                    Button { combo = .defaultPreviousSpace } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                        .buttonStyle(.borderless)
+                        .help("Use default (\(KeyCombo.defaultPreviousSpace.display))")
+                }
+            }
+        }
+        .onDisappear { stopRecording() }
+    }
+
+    private func startRecording() {
+        isRecording = true
+        // Let go of the current global shortcut so pressing it again can be recorded.
+        NotificationCenter.default.post(name: .roostShortcutRecording, object: nil, userInfo: ["active": true])
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stopRecording()
+            } else if let recorded = KeyCombo(event: event) {
+                combo = recorded
+                stopRecording()
+            } else {
+                NSSound.beep() // needs ⌘, ⌥ or ⌃ (function keys may be used alone)
+            }
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        if isRecording {
+            isRecording = false
+            NotificationCenter.default.post(name: .roostShortcutRecording, object: nil, userInfo: ["active": false])
+        }
     }
 }
