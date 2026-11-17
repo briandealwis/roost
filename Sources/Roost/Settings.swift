@@ -42,7 +42,6 @@ final class Settings: ObservableObject {
         static let labelUnnamed = "labelUnnamedSpaces"
         static let labelStyle = "spaceLabelStyle"
         static let labelPosition = "spaceLabelPosition"
-        static let previousSpaceShortcut = "previousSpaceShortcut"
     }
 
     private let defaults = UserDefaults.standard
@@ -117,15 +116,6 @@ final class Settings: ObservableObject {
     var labelStyle: LabelStyle {
         get { LabelStyle(rawValue: defaults.string(forKey: Key.labelStyle) ?? "") ?? .watermark }
         set { set(newValue.rawValue, Key.labelStyle) }
-    }
-
-    /// Shortcut for "switch back to the previous Space"; nil = none. Defaults to ⌥⌘F3.
-    var previousSpaceShortcut: KeyCombo? {
-        get {
-            guard let data = defaults.data(forKey: Key.previousSpaceShortcut) else { return .defaultPreviousSpace }
-            do { return try JSONDecoder().decode(KeyCombo?.self, from: data) } catch { return .defaultPreviousSpace }
-        }
-        set { set((try? JSONEncoder().encode(newValue)) ?? Data(), Key.previousSpaceShortcut) }
     }
 
     var labelPosition: LabelPosition {

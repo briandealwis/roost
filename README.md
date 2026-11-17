@@ -40,19 +40,6 @@ built-in screen. It can also give your Spaces names.
 - Turn the feature on or off in **Settings… → Space Names**. The menu bar name and the
   labels each have their own switch too.
 
-### Switch back to the previous Space
-
-Press **⌥⌘F3** to jump back to the Space you were on before, for example after a notification
-or an app pulled you to another one. Press it again to return. On a Mac keyboard, also hold
-**fn** unless F-keys are set to act as standard function keys. You can change or remove the
-shortcut in **Settings…**, and the menu also has a **Switch Back to …** item.
-
-macOS has no public API for changing Spaces, so Roost presses Mission Control's own
-**Switch to Desktop N** shortcut for you. Turn those on in System Settings › Keyboard ›
-Keyboard Shortcuts › Mission Control. For Spaces without one, including full-screen apps, Roost
-brings forward a window on that Space and macOS follows it there. That fallback can't reach an
-empty Space.
-
 ### Menu (left- or right-click the menu bar icon)
 
 - **Change Display Arrangement…** opens System Settings › Displays and presses the
@@ -67,9 +54,6 @@ empty Space.
   - **Space Names**: the on/off switch and the name in the menu bar.
   - **Space Labels**: labels on each Space, labels for Spaces without a name, and label style
     and position.
-
-  - **Switch Back to Previous Space**: record a different shortcut, remove it, or go back
-    to the default. It also shows which Mission Control "Switch to Desktop" shortcuts are on.
 
   Options that depend on a switch are greyed out while it's off.
 

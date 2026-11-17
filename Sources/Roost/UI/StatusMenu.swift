@@ -61,12 +61,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                     menu.addItem(rename)
                 }
             }
-        }
-        menu.addItem(switchBackItem())
-        if settings.spaceNamesEnabled {
             menu.addItem(submenu("Spaces", spacesMenu(spaces)))
+            menu.addItem(.separator())
         }
-        menu.addItem(.separator())
 
         menu.addItem(disabled(config.summary.isEmpty ? "No displays" : config.summary))
         menu.addItem(disabled(layout.lastStatus))
@@ -84,19 +81,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("Quit Roost", #selector(quit), key: "q"))
-    }
-
-    private func switchBackItem() -> NSMenuItem {
-        guard let previous = SpaceSwitcher.shared.previousSpace else {
-            return disabled("Switch Back to Previous Space")
-        }
-        let name = settings.spaceNamesEnabled ? names.displayName(for: previous) : previous.defaultName
-        let entry = item("Switch Back to \(name)", #selector(switchBack))
-        if let combo = settings.previousSpaceShortcut {
-            entry.keyEquivalent = combo.menuKeyEquivalent
-            entry.keyEquivalentModifierMask = combo.modifierFlags
-        }
-        return entry
     }
 
     private func spacesMenu(_ spaces: SpacesState) -> NSMenu {
@@ -178,7 +162,6 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
     }
 
-    @objc private func switchBack() { SpaceSwitcher.shared.switchToPreviousSpace() }
     @objc private func restoreNow() { layout.restore(reason: "manual") }
     @objc private func snapshotNow() { layout.snapshot(reason: "manual", thorough: true, force: true) }
 
