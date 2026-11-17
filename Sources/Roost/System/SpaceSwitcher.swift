@@ -21,12 +21,10 @@ final class SpaceSwitcher: NSObject {
     private(set) var previousSpaceID: CGSSpaceID?
     private var isRecordingShortcut = false
     private var hasExplainedShortcuts = false
-    /// What the last switch attempt did, shown in the menu while we debug this feature.
-    private(set) var lastResult = "Not used yet"
     private(set) var isHotKeyRegistered = false
 
+    /// Logs what a switch attempt did (`log stream --predicate 'subsystem == "app.roost.Roost"'`).
     private func note(_ message: String) {
-        lastResult = message
         Log.spaces.notice("Switch back: \(message, privacy: .public)")
     }
 
