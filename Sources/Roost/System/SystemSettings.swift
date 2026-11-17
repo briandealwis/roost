@@ -68,4 +68,13 @@ enum Permissions {
     static func requestAccessibility() -> Bool {
         AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
+
+    /// Sending keystrokes (used to press Mission Control's "Switch to Desktop N") is a separate
+    /// permission from Accessibility, although both are listed under Privacy & Security ›
+    /// Accessibility. macOS only adds an app to that list once it asks for it.
+    static var canPostEvents: Bool { CGPreflightPostEventAccess() }
+
+    /// Shows the system prompt the first time; afterwards macOS just returns the current state.
+    @discardableResult
+    static func requestPostEvents() -> Bool { CGRequestPostEventAccess() }
 }

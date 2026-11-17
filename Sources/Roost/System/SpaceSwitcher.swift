@@ -21,6 +21,14 @@ final class SpaceSwitcher: NSObject {
     private(set) var previousSpaceID: CGSSpaceID?
     private var isRecordingShortcut = false
     private var hasExplainedShortcuts = false
+    /// What the last switch attempt did, shown in the menu while we debug this feature.
+    private(set) var lastResult = "Not used yet"
+    private(set) var isHotKeyRegistered = false
+
+    private func note(_ message: String) {
+        lastResult = message
+        Log.spaces.notice("Switch back: \(message, privacy: .public)")
+    }
 
     func start() {
         currentSpaceID = CGS.activeSpaceID()
@@ -30,6 +38,9 @@ final class SpaceSwitcher: NSObject {
         center.addObserver(self, selector: #selector(updateHotKey), name: .roostSettingsChanged, object: nil)
         center.addObserver(self, selector: #selector(recordingChanged(_:)), name: .roostShortcutRecording, object: nil)
         updateHotKey()
+        if settings.previousSpaceShortcut != nil, !Permissions.canPostEvents {
+            Permissions.requestPostEvents()
+        }
     }
 
     /// The Space to go back to, if it still exists.
@@ -38,7 +49,11 @@ final class SpaceSwitcher: NSObject {
     }
 
     @objc private func activeSpaceChanged() {
-        guard let now = CGS.activeSpaceID(), now != currentSpaceID else { return }
+        guard let now = CGS.activeSpaceID(), now != currentSpaceID else {
+            Log.spaces.info("Active Space notification, but active Space unchanged (\(CGS.activeSpaceID() ?? 0))")
+            return
+        }
+        Log.spaces.info("Active Space \(self.currentSpaceID ?? 0) → \(now)")
         // Going back makes the Space we left the new "previous", so pressing the shortcut
         // repeatedly toggles between two Spaces.
         previousSpaceID = currentSpaceID
@@ -53,15 +68,19 @@ final class SpaceSwitcher: NSObject {
     @objc private func updateHotKey() {
         guard let combo = settings.previousSpaceShortcut, !isRecordingShortcut else {
             HotKeyCenter.shared.unregister(id: Self.hotKeyID)
+            isHotKeyRegistered = false
             return
         }
-        HotKeyCenter.shared.register(id: Self.hotKeyID, combo: combo) { [weak self] in
+        isHotKeyRegistered = HotKeyCenter.shared.register(id: Self.hotKeyID, combo: combo) { [weak self] in
+            Log.spaces.notice("Switch back: shortcut pressed")
             self?.switchToPreviousSpace()
         }
+        Log.spaces.notice("Shortcut \(combo.display, privacy: .public) (key \(combo.keyCode), modifiers \(combo.carbonModifiers)) registered: \(self.isHotKeyRegistered)")
     }
 
     func switchToPreviousSpace() {
         guard let target = previousSpace else {
+            note(previousSpaceID == nil ? "No previous Space recorded yet" : "Previous Space \(previousSpaceID ?? 0) no longer exists")
             NSSound.beep()
             return
         }
@@ -69,22 +88,40 @@ final class SpaceSwitcher: NSObject {
     }
 
     func switchTo(_ space: SpaceInfo) {
-        if !space.isFullscreen, let shortcut = MissionControlShortcuts.switchToDesktop(space.number) {
+        let label = "\(space.defaultName) (id \(space.id))"
+        let shortcut = space.isFullscreen ? nil : MissionControlShortcuts.switchToDesktop(space.number)
+        if shortcut != nil, !Permissions.canPostEvents {
+            // Without this permission macOS silently drops the keystroke.
+            Permissions.requestPostEvents()
+        }
+        if let shortcut, Permissions.canPostEvents {
             Task { @MainActor in
                 // The user is probably still holding the modifiers of our own shortcut; let go
                 // of them first so Mission Control sees exactly its shortcut.
-                await Self.waitForModifierRelease()
+                let released = await Self.waitForModifierRelease()
                 shortcut.post()
+                self.note("Pressed Mission Control shortcut (key \(shortcut.keyCode), flags \(shortcut.flags)) for \(label); "
+                    + "modifiers released: \(released)")
             }
             return
         }
-        if bringForwardWindow(on: space) { return }
+        let why = shortcut == nil ? "No Desktop \(space.number) shortcut" : "Not allowed to send keystrokes"
+        if let app = bringForwardWindow(on: space) {
+            note("\(why); brought forward a \(app) window on \(label)")
+            return
+        }
+        note("\(why) and no window found on \(label); Accessibility: \(AXIsProcessTrusted())")
         NSSound.beep()
-        explainDesktopShortcuts(for: space)
+        if !AXIsProcessTrusted() || (shortcut != nil && !Permissions.canPostEvents) {
+            explainMissingPermissions(for: space)
+        } else {
+            explainDesktopShortcuts(for: space)
+        }
     }
 
-    private func bringForwardWindow(on space: SpaceInfo) -> Bool {
-        guard AXIsProcessTrusted() else { return false }
+    /// Returns the app name whose window was brought forward.
+    private func bringForwardWindow(on space: SpaceInfo) -> String? {
+        guard AXIsProcessTrusted() else { return nil }
         // Front-to-back order, so this picks the window that was on top on that Space.
         for window in catalog.liveWindows() where window.spaces == [space.id] {
             guard let element = catalog.elements(for: [window])[window.id],
@@ -93,9 +130,29 @@ final class SpaceSwitcher: NSObject {
             AXUIElementPerformAction(element, "AXRaise" as CFString)
             AXUIElementCreateApplication(window.pid).set("AXFrontmost", true)
             NSRunningApplication(processIdentifier: window.pid)?.activate(options: [])
-            return true
+            return window.appName
         }
-        return false
+        return nil
+    }
+
+    private func explainMissingPermissions(for space: SpaceInfo) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Roost can’t switch to \(SpaceNames.shared.displayName(for: space))"
+        var missing: [String] = []
+        if !AXIsProcessTrusted() { missing.append("Accessibility access") }
+        if !Permissions.canPostEvents { missing.append("permission to send keystrokes") }
+        alert.informativeText = "Roost doesn’t have \(missing.joined(separator: " or ")). "
+            + "Turn Roost on in System Settings › Privacy & Security › Accessibility.\n\n"
+            + "If Roost already looks turned on there, it was probably rebuilt: macOS ties the permission "
+            + "to the exact build. Remove Roost from the list with −, add it back, and relaunch Roost."
+        alert.addButton(withTitle: "Open Privacy & Security")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            Permissions.requestAccessibility()
+            Permissions.requestPostEvents()
+            NSWorkspace.shared.open(SystemSettings.accessibilityURL)
+        }
     }
 
     private func explainDesktopShortcuts(for space: SpaceInfo) {
@@ -113,10 +170,13 @@ final class SpaceSwitcher: NSObject {
         }
     }
 
-    private static func waitForModifierRelease() async {
-        for _ in 0..<40 where !NSEvent.modifierFlags.intersection(KeyCombo.relevantModifiers).isEmpty {
+    /// Returns whether the modifiers were released within a second.
+    private static func waitForModifierRelease() async -> Bool {
+        for _ in 0..<40 {
+            if NSEvent.modifierFlags.intersection(KeyCombo.relevantModifiers).isEmpty { return true }
             try? await Task.sleep(nanoseconds: 25_000_000)
         }
+        return false
     }
 }
 

@@ -12,6 +12,9 @@
 #   install   Build (Release) and copy Roost.app to ~/Applications
 #   dist      Build (Release, universal) and package build/Roost-<version>.zip
 #   clean     Remove build output
+#   reset-permissions
+#             Forget Roost's Accessibility and keystroke permissions, so macOS
+#             asks again (needed after an ad-hoc rebuild; see Signing below)
 #
 # Signing:
 #   By default the app is ad-hoc signed ("-"), which is fine for running
@@ -141,8 +144,16 @@ case "$cmd" in
         log "Removing $BUILD_DIR/ and .build/"
         rm -rf "$BUILD_DIR" .build
         ;;
+    reset-permissions)
+        bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$INFO_PLIST")"
+        quit_running_app
+        log "Resetting Accessibility and keystroke permissions for $bundle_id"
+        tccutil reset Accessibility "$bundle_id"
+        tccutil reset PostEvent "$bundle_id"
+        log "Launch $APP_NAME again and approve the prompts"
+        ;;
     -h|--help|help)
-        sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "Unknown command: $cmd" >&2
