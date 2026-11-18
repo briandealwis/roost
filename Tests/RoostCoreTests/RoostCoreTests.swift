@@ -154,3 +154,67 @@ final class SpaceIdentityTests: XCTestCase {
         XCTAssertEqual(SpaceIdentity.key(uuid: "", displayUUID: "D", index: 2), "display:D#2")
     }
 }
+
+final class DisplayMapperTests: XCTestCase {
+    private func display(_ uuid: String, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, builtin: Bool = false) -> DisplayInfo {
+        DisplayInfo(uuid: uuid, name: uuid, frame: CGRect(x: x, y: y, width: w, height: h), isBuiltin: builtin)
+    }
+
+    func testHomeToOfficeWithSameLaptopAndDifferentMonitors() {
+        // Home: laptop, monitors on the left and right. Office: same arrangement, different monitors.
+        let home = DisplayConfiguration(displays: [
+            display("LAPTOP", 0, 0, 1512, 982, builtin: true),
+            display("HOME-L", -2560, -458, 2560, 1440),
+            display("HOME-R", 1512, -458, 2560, 1440),
+        ])
+        let office = DisplayConfiguration(displays: [
+            display("LAPTOP", 0, 0, 1512, 982, builtin: true),
+            display("WORK-L", -1920, -98, 1920, 1080),
+            display("WORK-R", 1512, -98, 1920, 1080),
+        ])
+        let map = DisplayMapper.map(from: home, to: office)
+        XCTAssertEqual(map["LAPTOP"]?.uuid, "LAPTOP")
+        XCTAssertEqual(map["HOME-L"]?.uuid, "WORK-L")
+        XCTAssertEqual(map["HOME-R"]?.uuid, "WORK-R")
+    }
+
+    func testBuiltinMapsToBuiltinAcrossMachines() {
+        let a = DisplayConfiguration(displays: [display("A-BUILTIN", 0, 0, 1512, 982, builtin: true), display("X", 1512, 0, 2560, 1440)])
+        let b = DisplayConfiguration(displays: [display("Y", -2560, 0, 2560, 1440), display("B-BUILTIN", 0, 0, 1728, 1117, builtin: true)])
+        let map = DisplayMapper.map(from: a, to: b)
+        XCTAssertEqual(map["A-BUILTIN"]?.uuid, "B-BUILTIN")
+        XCTAssertEqual(map["X"]?.uuid, "Y")
+    }
+
+    func testExtraSourceDisplaysGoToNearestTarget() {
+        let three = DisplayConfiguration(displays: [
+            display("LAPTOP", 0, 0, 1512, 982, builtin: true),
+            display("L", -2560, 0, 2560, 1440),
+            display("R", 1512, 0, 2560, 1440),
+        ])
+        let laptopOnly = DisplayConfiguration(displays: [display("LAPTOP", 0, 0, 1512, 982, builtin: true)])
+        let map = DisplayMapper.map(from: three, to: laptopOnly)
+        XCTAssertEqual(Set(map.values.map(\.uuid)), ["LAPTOP"])
+        XCTAssertEqual(map.count, 3)
+    }
+
+    func testSimilarityPrefersSharedDisplaysThenSameCount() {
+        let laptop = display("LAPTOP", 0, 0, 1512, 982, builtin: true)
+        let current = DisplayConfiguration(displays: [laptop, display("WORK", 1512, 0, 1920, 1080)])
+        let home = DisplayConfiguration(displays: [laptop, display("HOME", 1512, 0, 2560, 1440)])
+        let laptopOnly = DisplayConfiguration(displays: [laptop])
+        let other = DisplayConfiguration(displays: [display("Q", 0, 0, 100, 100), display("Z", 100, 0, 100, 100)])
+        XCTAssertGreaterThan(DisplayMapper.similarity(current, home), DisplayMapper.similarity(current, laptopOnly))
+        XCTAssertGreaterThan(DisplayMapper.similarity(current, laptopOnly), DisplayMapper.similarity(current, other))
+    }
+
+    func testScalesFramesToADifferentlySizedDisplay() {
+        let home = display("HOME", 0, 0, 2560, 1440)
+        let work = display("WORK", 100, 0, 1920, 1080)
+        let leftHalf = WindowRecord(windowID: 1, pid: 1, bundleID: nil, appName: "", title: nil, frame: .zero,
+                                    displayUUID: "HOME", frameInDisplay: CGRect(x: 0, y: 0, width: 1280, height: 1440),
+                                    spaceUUID: nil, spaceID: nil, spaceIndex: nil, ordinal: 0)
+        XCTAssertEqual(Geometry.targetFrame(for: leftHalf, on: work, from: home),
+                       CGRect(x: 100, y: 0, width: 960, height: 1080))
+    }
+}
