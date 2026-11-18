@@ -5,12 +5,21 @@ public enum Geometry {
     /// Where a saved window should go on `display` (global coordinates).
     /// Keeps the saved offset from the display origin, shrinks the window if it no longer
     /// fits and nudges it back on screen if it would otherwise be invisible.
-    public static func targetFrame(for record: WindowRecord, on display: DisplayInfo) -> CGRect {
+    ///
+    /// When the layout was saved on a different display (`source`) of another size, position and
+    /// size are scaled proportionally, so e.g. a window filling the left half still does.
+    public static func targetFrame(for record: WindowRecord, on display: DisplayInfo, from source: DisplayInfo? = nil) -> CGRect {
         let d = display.frame
-        var f = CGRect(x: d.minX + record.frameInDisplay.minX,
-                       y: d.minY + record.frameInDisplay.minY,
-                       width: min(record.frameInDisplay.width, d.width),
-                       height: min(record.frameInDisplay.height, d.height))
+        var rel = record.frameInDisplay
+        if let source, source.frame.width > 0, source.frame.height > 0, source.frame.size != d.size {
+            let sx = d.width / source.frame.width
+            let sy = d.height / source.frame.height
+            rel = CGRect(x: rel.minX * sx, y: rel.minY * sy, width: rel.width * sx, height: rel.height * sy)
+        }
+        var f = CGRect(x: d.minX + rel.minX,
+                       y: d.minY + rel.minY,
+                       width: min(rel.width, d.width),
+                       height: min(rel.height, d.height))
         if !f.intersects(d) || f.minY < d.minY || f.minY > d.maxY - 20 {
             f.origin.x = min(max(f.minX, d.minX), d.maxX - f.width)
             f.origin.y = min(max(f.minY, d.minY), d.maxY - f.height)

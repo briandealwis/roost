@@ -24,6 +24,12 @@ built-in screen. It can also give your Spaces names.
 - **Restores Spaces too.** Each window goes back to its own Space as well as its position. Roost
   first looks for the same Space; if that's gone, it uses the same desktop number on the same
   display.
+- **Uses a layout from another setup.** Arriving at a desk Roost hasn't seen before, pick
+  **Restore Layout From ▸ ‹your home setup›**. Displays connected in both setups (typically the
+  laptop screen) keep their windows. The other monitors are paired by position, left to right,
+  and windows are scaled to fit monitors of a different size. Each window goes to the same
+  desktop number on its new display. Roost then saves the result as this setup's layout, so it
+  restores automatically next time. The list shows the most similar setups first.
 - **Forgets old setups.** A setup that hasn't been connected for a month is deleted, along with
   its layout. This covers a desk you only used for a while, or an arrangement you changed in
   Display Settings. You can set this to 1 week, 2 weeks, 1 month, 3 months or never. You can
@@ -68,6 +74,8 @@ it after an ad-hoc rebuild; see the signing tip under Install.
   sheet, so Roost finds the button through Accessibility. The button only exists when two or
   more displays are connected; otherwise the Displays pane just stays open.
 - **Displays Settings…**, **Restore Layout Now**, **Save Layout Now**
+- **Restore Layout From**: apply a layout saved for a different display setup to the current
+  displays.
 - **Saved Display Setups**: each setup with its window count and when it was last seen.
 - **Settings…** (⌘,) opens the settings window:
   - **Window Layouts**: auto-restore, moving windows between Spaces, how often to save in the

@@ -78,6 +78,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         menu.addItem(item("Restore Layout Now", #selector(restoreNow)))
         menu.addItem(item("Save Layout Now", #selector(snapshotNow)))
+        menu.addItem(submenu("Restore Layout From", restoreFromMenu()))
         menu.addItem(submenu("Saved Display Setups", savedLayoutsMenu(currentKey: config.key)))
         menu.addItem(.separator())
 
@@ -120,6 +121,25 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
             }
         }
         if sub.items.isEmpty { sub.addItem(disabled("Spaces unavailable")) }
+        return sub
+    }
+
+    /// Layouts saved for other display setups, most similar first, to apply to the current displays.
+    private func restoreFromMenu() -> NSMenu {
+        let sub = NSMenu()
+        let others = layout.otherSetups()
+        if others.isEmpty {
+            sub.addItem(disabled("No other display setups saved yet"))
+            return sub
+        }
+        for saved in others {
+            let entry = item("\(saved.configuration.summary) — \(saved.snapshot.windows.count) windows, seen \(relative(saved.lastSeen))",
+                             #selector(restoreFromSetup(_:)))
+            entry.representedObject = saved.key
+            sub.addItem(entry)
+        }
+        sub.addItem(.separator())
+        sub.addItem(disabled("Windows are matched to these displays by position"))
         return sub
     }
 
@@ -187,6 +207,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func switchBack() { SpaceSwitcher.shared.switchToPreviousSpace() }
+    @objc private func restoreFromSetup(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        layout.restore(fromSetup: key)
+    }
+
     @objc private func restoreNow() { layout.restore(reason: "manual") }
     @objc private func snapshotNow() { layout.snapshot(reason: "manual", thorough: true, force: true) }
 

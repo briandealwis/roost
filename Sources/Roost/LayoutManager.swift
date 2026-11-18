@@ -204,7 +204,9 @@ final class LayoutManager: NSObject {
         }
     }
 
-    func restore(reason: String, isFollowUp: Bool = false) {
+    /// Restores the layout saved for the current display setup, or, with `source`, a layout
+    /// saved for a different setup (displays are matched up by `DisplayMapper`).
+    func restore(reason: String, isFollowUp: Bool = false, from source: SavedLayout? = nil) {
         defer {
             suppressSnapshots(for: 5)
             NotificationCenter.default.post(name: .roostLayoutStatusChanged, object: nil)
@@ -214,11 +216,21 @@ final class LayoutManager: NSObject {
             return
         }
         let config = currentConfiguration
-        guard let saved = store.layout(for: config.key) else {
-            if !isFollowUp { lastStatus = "No saved layout yet for \(config.summary)" }
-            return
+        let saved: SavedLayout
+        let displayMap: [String: DisplayInfo]
+        if let source, source.key != config.key {
+            saved = source
+            displayMap = DisplayMapper.map(from: source.configuration, to: config)
+        } else {
+            guard let own = store.layout(for: config.key) else {
+                if !isFollowUp { lastStatus = "No saved layout yet for \(config.summary)" }
+                return
+            }
+            saved = own
+            displayMap = Dictionary(config.displays.map { ($0.uuid, $0) }, uniquingKeysWith: { a, _ in a })
+            store.markSeen(config.key)
         }
-        store.markSeen(config.key)
+        let isFromOtherSetup = saved.key != config.key
 
         let live = catalog.liveWindows()
         let liveByID = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -237,11 +249,12 @@ final class LayoutManager: NSObject {
         var plans: [Plan] = []
         for match in matches {
             guard let window = liveByID[match.candidate.windowID],
-                  let display = config.display(uuid: match.record.displayUUID) else { continue }
-            let target = Geometry.targetFrame(for: match.record, on: display)
+                  let display = displayMap[match.record.displayUUID] else { continue }
+            let target = Geometry.targetFrame(for: match.record, on: display,
+                                              from: saved.configuration.display(uuid: match.record.displayUUID))
             var targetSpace: SpaceInfo?
             if settings.moveAcrossSpaces, window.spaces.count == 1,
-               let space = resolveSpace(for: match.record, in: spaces), space.id != window.spaces[0] {
+               let space = resolveSpace(for: match.record, on: display.uuid, in: spaces), space.id != window.spaces[0] {
                 targetSpace = space
             }
             if targetSpace != nil || !Geometry.approximatelyEqual(window.frame, target) {
@@ -283,22 +296,48 @@ final class LayoutManager: NSObject {
         }
 
         var status = "Restored \(moved) window\(moved == 1 ? "" : "s") on \(config.summary)"
+        if isFromOtherSetup { status += " from \(saved.configuration.summary)" }
         if spaceFailures > 0 { status += " · \(spaceFailures) couldn't change Space" }
         if unreachable > 0 { status += " · \(unreachable) unreachable" }
         if !isFollowUp || moved > 0 { lastStatus = status }
         Log.layout.info("Restore (\(reason, privacy: .public)\(isFollowUp ? " follow-up" : "", privacy: .public)): \(status, privacy: .public)")
     }
 
-    /// The saved Space, if it can be identified confidently and is on the window's target display.
-    private func resolveSpace(for record: WindowRecord, in spaces: SpacesState) -> SpaceInfo? {
+    /// The saved Space, if it can be identified confidently and is on the window's target display:
+    /// the same Space if it's there, otherwise the same desktop number on that display.
+    private func resolveSpace(for record: WindowRecord, on displayUUID: String, in spaces: SpacesState) -> SpaceInfo? {
         if let uuid = record.spaceUUID, let space = spaces.space(uuid: uuid),
-           space.displayUUID == record.displayUUID, !space.isFullscreen {
+           space.displayUUID == displayUUID, !space.isFullscreen {
             return space
         }
         if let index = record.spaceIndex, index >= 0 {
-            return spaces.space(displayUUID: record.displayUUID, index: index)
+            return spaces.space(displayUUID: displayUUID, index: index)
         }
         return nil
+    }
+
+    /// Applies another setup's layout here, then saves the result as this setup's own layout so
+    /// automatic restores work from now on.
+    func restore(fromSetup key: String) {
+        guard let source = store.layout(for: key) else { return }
+        restore(reason: "from \(source.configuration.summary)", from: source)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self, self.currentConfiguration.key != key else { return }
+            self.snapshot(reason: "restored from \(source.configuration.summary)", thorough: true, force: true)
+        }
+    }
+
+    /// Other saved setups, most similar to the current displays first.
+    func otherSetups() -> [SavedLayout] {
+        let config = currentConfiguration
+        return store.sortedLayouts
+            .filter { $0.key != config.key }
+            .sorted {
+                let a = DisplayMapper.similarity(config, $0.configuration)
+                let b = DisplayMapper.similarity(config, $1.configuration)
+                return a != b ? a > b : $0.lastSeen > $1.lastSeen
+            }
     }
 
     // MARK: Housekeeping
