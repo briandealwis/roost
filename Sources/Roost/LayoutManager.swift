@@ -167,11 +167,12 @@ final class LayoutManager: NSObject {
         let config = currentConfiguration
         guard !config.displays.isEmpty else { return }
         let spaces = SpacesState.current()
-        // Only windows Accessibility has confirmed as standard windows are saved. The fast
-        // (non-thorough) snapshots rely on what the last thorough one learned.
+        // Windows Accessibility identified as popups, palettes etc. are left out. Windows it
+        // couldn't reach are kept: restore checks again before moving anything, and records are
+        // only ever matched by window id or title, so a stray record can't resize another window.
         var live = catalog.liveWindows()
         if thorough { catalog.refreshMetadata(for: live) }
-        live = live.filter { catalog.isConfirmedStandard($0.id) }
+        live = live.filter { !catalog.isKnownNonStandard($0.id) }
 
         let records: [WindowRecord] = live.compactMap { window in
             let space = window.spaces.count == 1 ? spaces.space(id: window.spaces[0]) : nil

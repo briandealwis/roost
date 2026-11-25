@@ -130,8 +130,9 @@ keep its own Spaces.
 | Spaces, and which Space each window is on | `CGSCopyManagedDisplaySpaces`, `CGSCopySpacesForWindows` (private) |
 | Moving a window to another Space | `CGSMoveWindowsToManagedSpace`, falling back to the `CGSSpaceSetCompatID` method on macOS 14.5+ (private) |
 
-Only regular document windows are saved and moved: windows that Accessibility confirms are
-standard windows. Popups, find bars, palettes and the like are left alone.
+Only regular document windows are moved: Roost checks with Accessibility that a window is a
+standard window before moving or resizing it. Popups, find bars, palettes and the like are left
+alone.
 
 Windows are matched to saved records by WindowServer id first. That id survives sleep and
 display changes. If the id doesn't match (for example, the app was relaunched), Roost falls back

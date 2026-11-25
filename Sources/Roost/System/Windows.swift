@@ -17,11 +17,12 @@ struct LiveWindow {
 final class WindowCatalog {
     private var elementCache: [UInt32: AXUIElement] = [:]
     private var titleCache: [UInt32: String] = [:]
-    /// Whether each window is a regular document window (AXStandardWindow), as far as
-    /// Accessibility has told us. Chrome's find bar, popups and bubbles are separate windows
-    /// that must never be saved or resized.
+    /// What Accessibility has told us about each window: true for a regular document window
+    /// (AXStandardWindow), false for popups, sheets, palettes etc. Missing means unknown, which is
+    /// common for windows on other Spaces that we couldn't reach in time. Unknown is *not* the
+    /// same as non-standard: such windows are still saved, and checked again before moving them.
     private var isStandard: [UInt32: Bool] = [:]
-    /// Windows we couldn't reach through Accessibility, and how often we've tried.
+    /// How often we failed to reach a window, to avoid re-probing it on every snapshot.
     private var unreachableAttempts: [UInt32: Int] = [:]
 
     /// Cheap: WindowServer only, no Accessibility round trips. Safe to call right before a
@@ -66,8 +67,8 @@ final class WindowCatalog {
 
     func cachedTitle(_ id: UInt32) -> String? { titleCache[id] }
 
-    /// True only for windows Accessibility has confirmed are standard windows.
-    func isConfirmedStandard(_ id: UInt32) -> Bool { isStandard[id] == true }
+    /// True for windows Accessibility has identified as popups, palettes and the like.
+    func isKnownNonStandard(_ id: UInt32) -> Bool { isStandard[id] == false }
 
     private func classify(_ id: UInt32, _ element: AXUIElement) {
         elementCache[id] = element
@@ -77,9 +78,8 @@ final class WindowCatalog {
     }
 
     /// Refreshes titles and the standard/non-standard classification. Windows on the current
-    /// Space come from each app's window list; the rest are looked up across Spaces. A window
-    /// Accessibility still can't find after a few tries is treated as non-standard (Chrome's
-    /// find bar, for example, isn't exposed as a window at all). Never moves anything.
+    /// Space come from each app's window list; the rest are looked up across Spaces (with a
+    /// time budget, so some may stay unknown). Never moves anything.
     func refreshMetadata(for windows: [LiveWindow]) {
         guard AXIsProcessTrusted() else { return }
         let liveIDs = Set(windows.map(\.id))
@@ -97,16 +97,15 @@ final class WindowCatalog {
             }
         }
 
-        let unknown = windows.filter { isStandard[$0.id] == nil }
+        // Don't keep probing windows we've failed to reach twice (e.g. Chrome's find bar).
+        let unknown = windows.filter { isStandard[$0.id] == nil && unreachableAttempts[$0.id, default: 0] < 2 }
         guard !unknown.isEmpty else { return }
         let found = elements(for: unknown)
         for window in unknown {
             if let element = found[window.id] {
                 classify(window.id, element)
             } else {
-                let attempts = unreachableAttempts[window.id, default: 0] + 1
-                unreachableAttempts[window.id] = attempts
-                if attempts >= 2 { isStandard[window.id] = false }
+                unreachableAttempts[window.id, default: 0] += 1
             }
         }
     }
