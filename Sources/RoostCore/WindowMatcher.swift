@@ -26,8 +26,11 @@ public struct WindowMatch: Equatable {
 public enum WindowMatcher {
     /// Pairs saved records with live windows, each used at most once:
     /// 1. same WindowServer id and process (survives sleep / display changes),
-    /// 2. same app and same non-empty title (survives app relaunch),
-    /// 3. same app and same front-to-back position (last resort).
+    /// 2. same app and same non-empty title (survives app relaunch).
+    ///
+    /// There is deliberately no "n-th window of the app" fallback: front-to-back order changes
+    /// all the time, and it paired real windows with records of popups and find bars, shrinking
+    /// them to those sizes.
     public static func match(records: [WindowRecord], candidates: [WindowCandidate]) -> [WindowMatch] {
         var matches: [WindowMatch] = []
         var remainingRecords = records
@@ -51,7 +54,6 @@ public enum WindowMatcher {
                   let title = r.title, !title.isEmpty else { return false }
             return title == c.title
         }
-        pass { r, c in r.bundleID != nil && r.bundleID == c.bundleID && r.ordinal == c.ordinal }
         return matches
     }
 }

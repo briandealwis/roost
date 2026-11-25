@@ -17,8 +17,12 @@ struct LiveWindow {
 final class WindowCatalog {
     private var elementCache: [UInt32: AXUIElement] = [:]
     private var titleCache: [UInt32: String] = [:]
-    /// Windows we've seen through AX that aren't regular document windows (palettes, popovers...).
-    private var nonStandard: Set<UInt32> = []
+    /// Whether each window is a regular document window (AXStandardWindow), as far as
+    /// Accessibility has told us. Chrome's find bar, popups and bubbles are separate windows
+    /// that must never be saved or resized.
+    private var isStandard: [UInt32: Bool] = [:]
+    /// Windows we couldn't reach through Accessibility, and how often we've tried.
+    private var unreachableAttempts: [UInt32: Int] = [:]
 
     /// Cheap: WindowServer only, no Accessibility round trips. Safe to call right before a
     /// display reconfiguration.
@@ -37,7 +41,7 @@ final class WindowCatalog {
                   let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
                   frame.width >= 60, frame.height >= 40,
-                  !nonStandard.contains(id)
+                  isStandard[id] != false
             else { continue }
             if let alpha = (entry[kCGWindowAlpha as String] as? NSNumber)?.doubleValue, alpha < 0.01 { continue }
 
@@ -62,25 +66,47 @@ final class WindowCatalog {
 
     func cachedTitle(_ id: UInt32) -> String? { titleCache[id] }
 
-    /// Refreshes titles and the standard/non-standard classification using each app's
-    /// visible window list. Only touches AX, never moves anything.
+    /// True only for windows Accessibility has confirmed are standard windows.
+    func isConfirmedStandard(_ id: UInt32) -> Bool { isStandard[id] == true }
+
+    private func classify(_ id: UInt32, _ element: AXUIElement) {
+        elementCache[id] = element
+        if let title = element.title, !title.isEmpty { titleCache[id] = title }
+        isStandard[id] = element.isStandardWindow
+        unreachableAttempts[id] = nil
+    }
+
+    /// Refreshes titles and the standard/non-standard classification. Windows on the current
+    /// Space come from each app's window list; the rest are looked up across Spaces. A window
+    /// Accessibility still can't find after a few tries is treated as non-standard (Chrome's
+    /// find bar, for example, isn't exposed as a window at all). Never moves anything.
     func refreshMetadata(for windows: [LiveWindow]) {
         guard AXIsProcessTrusted() else { return }
         let liveIDs = Set(windows.map(\.id))
         elementCache = elementCache.filter { liveIDs.contains($0.key) }
         titleCache = titleCache.filter { liveIDs.contains($0.key) }
+        isStandard = isStandard.filter { liveIDs.contains($0.key) }
+        unreachableAttempts = unreachableAttempts.filter { liveIDs.contains($0.key) }
 
         for pid in Set(windows.map(\.pid)) {
             let app = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(app, 0.5)
             for element in app.elements("AXWindows") {
                 guard let id = AXPrivate.windowID(of: element), liveIDs.contains(id) else { continue }
-                elementCache[id] = element
-                if let title = element.title, !title.isEmpty { titleCache[id] = title }
-                if element.role == "AXWindow", let subrole = element.subrole,
-                   subrole != "AXStandardWindow", subrole != "AXUnknown" {
-                    nonStandard.insert(id)
-                }
+                classify(id, element)
+            }
+        }
+
+        let unknown = windows.filter { isStandard[$0.id] == nil }
+        guard !unknown.isEmpty else { return }
+        let found = elements(for: unknown)
+        for window in unknown {
+            if let element = found[window.id] {
+                classify(window.id, element)
+            } else {
+                let attempts = unreachableAttempts[window.id, default: 0] + 1
+                unreachableAttempts[window.id] = attempts
+                if attempts >= 2 { isStandard[window.id] = false }
             }
         }
     }

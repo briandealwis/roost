@@ -167,8 +167,11 @@ final class LayoutManager: NSObject {
         let config = currentConfiguration
         guard !config.displays.isEmpty else { return }
         let spaces = SpacesState.current()
-        let live = catalog.liveWindows()
+        // Only windows Accessibility has confirmed as standard windows are saved. The fast
+        // (non-thorough) snapshots rely on what the last thorough one learned.
+        var live = catalog.liveWindows()
         if thorough { catalog.refreshMetadata(for: live) }
+        live = live.filter { catalog.isConfirmedStandard($0.id) }
 
         let records: [WindowRecord] = live.compactMap { window in
             let space = window.spaces.count == 1 ? spaces.space(id: window.spaces[0]) : nil
@@ -289,7 +292,8 @@ final class LayoutManager: NSObject {
             WindowMover.withoutEnhancedUI(pid: pid) {
                 for plan in group {
                     guard let element = elements[plan.window.id] else { unreachable += 1; continue }
-                    guard !element.isMinimized, !element.isFullScreen else { continue }
+                    // Never resize popups, find bars, palettes and the like.
+                    guard element.isStandardWindow, !element.isMinimized, !element.isFullScreen else { continue }
                     if WindowMover.setFrame(element, to: plan.target) { moved += 1 }
                 }
             }

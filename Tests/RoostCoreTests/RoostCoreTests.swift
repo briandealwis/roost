@@ -92,12 +92,13 @@ final class WindowMatcherTests: XCTestCase {
         XCTAssertEqual(matches.first?.candidate.windowID, 99)
     }
 
-    func testFallsBackToOrdinal() {
+    func testNeverMatchesByPositionAlone() {
+        // A saved popup/find bar must not be paired with an unrelated window of the same app.
         let matches = WindowMatcher.match(
-            records: [record(1, pid: 10, ordinal: 1)],
+            records: [record(1, pid: 10, title: "Find in page", ordinal: 1)],
             candidates: [WindowCandidate(windowID: 50, pid: 20, bundleID: "com.app", title: nil, ordinal: 0),
-                         WindowCandidate(windowID: 51, pid: 20, bundleID: "com.app", title: nil, ordinal: 1)])
-        XCTAssertEqual(matches.first?.candidate.windowID, 51)
+                         WindowCandidate(windowID: 51, pid: 20, bundleID: "com.app", title: "Inbox", ordinal: 1)])
+        XCTAssertTrue(matches.isEmpty)
     }
 
     func testEachCandidateUsedOnce() {
